@@ -42,7 +42,7 @@ public class Bydfi extends BydfiApi
        super(options);
    }
 
-    public Object describe()
+    public Map<String, Object> describe()
     {
         return this.deepExtend(super.describe(), new HashMap<String, Object>() {{
             put( "id", "bydfi" );
@@ -648,11 +648,11 @@ public class Bydfi extends BydfiApi
         String settleId = this.safeString(market, "marginAsset");
         String base = this.safeCurrencyCode(baseId, (Map<String, Object>) null);
         String quote = this.safeCurrencyCode(quoteId, (Map<String, Object>) null);
-        if ((java.util.Objects.equals(base, null)) || (java.util.Objects.equals(quote, null)))
+        String settle = this.safeCurrencyCode(settleId, (Map<String, Object>) null);
+        if ((java.util.Objects.equals(base, null)) || (java.util.Objects.equals(quote, null)) || (java.util.Objects.equals(settle, null)))
         {
             return null;
         }
-        String settle = this.safeCurrencyCode(settleId, (Map<String, Object>) null);
         String symbol = ((((base + "/") + quote) + ":") + settle);
         Boolean inverse = (Boolean) this.safeBool(market, "reverse", (Object) null);
         String limitMaxQty = this.safeString(market, "limitMaxQty");
@@ -1079,7 +1079,7 @@ public class Bydfi extends BydfiApi
             Map<String, Object> paramsUntil = (Map<String, Object>) ((List<Object>) untilParamparamsUntilVariable).get(1);
             Long now = this.milliseconds();
             Long duration = (((long) this.parseTimeframe(java.util.Objects.requireNonNullElse(timeframe, "1m"))) * 1000L);
-            Long timeDelta = (duration * numberOfCandles);
+            Long timeDelta = this.parseToInt((duration * numberOfCandles));
             Object startTime = since;
             Object until = untilParam;
             if (java.util.Objects.equals(since, null) && java.util.Objects.equals(untilParam, null))
@@ -1536,7 +1536,7 @@ public class Bydfi extends BydfiApi
         Boolean isTailingStopOrder = (!java.util.Objects.equals(trailingPercent, null));
         String stopPrice = null;
         Boolean isStopOrTakeProfit = Boolean.TRUE.equals(isStopLossOrder) || Boolean.TRUE.equals(isTakeProfitOrder);
-        Object query = parameters;
+        Map<String, Object> query = parameters;
         if (Boolean.TRUE.equals(isStopOrTakeProfit))
         {
             query = this.omit(parameters, new ArrayList<Object>(Arrays.asList("stopLossPrice", "takeProfitPrice")));
@@ -1552,7 +1552,7 @@ public class Bydfi extends BydfiApi
             String trailingTriggerPrice = this.numberToString(price);
             List<Object> trailingTriggerPricequeryVariable = (List<Object>) this.handleParamString(query, "trailingTriggerPrice", trailingTriggerPrice);
             trailingTriggerPrice = (String) ((List<Object>) trailingTriggerPricequeryVariable).get(0);
-            query = ((List<Object>) trailingTriggerPricequeryVariable).get(1);
+            query = (Map<String, Object>) ((List<Object>) trailingTriggerPricequeryVariable).get(1);
             if (!java.util.Objects.equals(trailingTriggerPrice, null))
             {
                 request.put("activationPrice", this.priceToPrecision(symbol, trailingTriggerPrice));
@@ -1617,11 +1617,11 @@ public class Bydfi extends BydfiApi
         {
             throw new NotSupported((this.id + " createOrder() closePosition is only supported for stopLoss and takeProfit market orders")) ;
         }
-        String timeInForce = this.handleTimeInForce(((Map<String, Object>) (switch ((Object) (query)) { case null -> (Map<String, Object>) null; case Map<?, ?> hx4J40v3 -> (Map<String, Object>) hx4J40v3; case Object hx4J40v3 -> throw new ClassCastException("ccxt: expected a dictionary, got " + hx4J40v3.getClass().getName()); })));
+        String timeInForce = this.handleTimeInForce(query);
         Boolean postOnly = false;
-        List<Object> postOnlyqueryVariable = (List<Object>) this.handlePostOnly(isMarketOrder, java.util.Objects.equals(timeInForce, "POST_ONLY"), ((Map<String, Object>) (switch ((Object) (query)) { case null -> (Map<String, Object>) null; case Map<?, ?> hx4J40v2 -> (Map<String, Object>) hx4J40v2; case Object hx4J40v2 -> throw new ClassCastException("ccxt: expected a dictionary, got " + hx4J40v2.getClass().getName()); })));
+        List<Object> postOnlyqueryVariable = (List<Object>) this.handlePostOnly(isMarketOrder, java.util.Objects.equals(timeInForce, "POST_ONLY"), query);
         postOnly = (Boolean) ((List<Object>) postOnlyqueryVariable).get(0);
-        query = ((List<Object>) postOnlyqueryVariable).get(1);
+        query = (Map<String, Object>) ((List<Object>) postOnlyqueryVariable).get(1);
         if (Boolean.TRUE.equals(postOnly))
         {
             timeInForce = "POST_ONLY";
@@ -1679,7 +1679,7 @@ public class Bydfi extends BydfiApi
                 throw new BadRequest((this.id + " createOrders() accepts a maximum of 5 orders")) ;
             }
             List<Object> ordersRequests = new ArrayList<Object>(Arrays.asList());
-            for (var i = 0; i < ((List<?>)orders).size(); i++)
+            for (var i = 0; (length != null && i < length); i++)
             {
                 Map<String, Object> rawOrder = (Map<String, Object>) this.safeDict(orders, i, (Object) null);
                 String symbol = this.safeString(rawOrder, "symbol");
@@ -1767,7 +1767,7 @@ public class Bydfi extends BydfiApi
                 throw new BadRequest((this.id + " editOrders() accepts a maximum of 5 orders")) ;
             }
             List<Object> ordersRequests = new ArrayList<Object>(Arrays.asList());
-            for (var i = 0; i < ((List<?>)orders).size(); i++)
+            for (var i = 0; (length != null && i < length); i++)
             {
                 Map<String, Object> rawOrder = (Map<String, Object>) this.safeDict(orders, i, (Object) null);
                 String id = this.safeString(rawOrder, "id");
@@ -1930,8 +1930,7 @@ public class Bydfi extends BydfiApi
                 put( "wallet", walletOption );
             }};
             Map<String, Object> response = null;
-            Boolean trigger = false;
-            Pair<Boolean, Map<String, Object>> triggerOptionparamsTriggerVariable = this.handleOptionBoolAndParams((Map<String, Object>) (paramsWallet), "fetchOpenOrders", "trigger", trigger);
+            Pair<Boolean, Map<String, Object>> triggerOptionparamsTriggerVariable = this.handleOptionBoolAndParams((Map<String, Object>) (paramsWallet), "fetchOpenOrders", "trigger", false);
             Boolean triggerOption = triggerOptionparamsTriggerVariable.first();
             Map<String, Object> paramsTrigger = triggerOptionparamsTriggerVariable.second();
             if (!Boolean.TRUE.equals(triggerOption))
@@ -2024,8 +2023,7 @@ public class Bydfi extends BydfiApi
             Map<String, Object> paramsWallet = walletOptionparamsWalletVariable.second();
             request.put("wallet", walletOption);
             Map<String, Object> response = null;
-            Boolean trigger = false;
-            Pair<Boolean, Map<String, Object>> triggerOptionparamsTriggerVariable = this.handleOptionBoolAndParams((Map<String, Object>) (paramsWallet), "fetchOpenOrder", "trigger", trigger);
+            Pair<Boolean, Map<String, Object>> triggerOptionparamsTriggerVariable = this.handleOptionBoolAndParams((Map<String, Object>) (paramsWallet), "fetchOpenOrder", "trigger", false);
             Boolean triggerOption = triggerOptionparamsTriggerVariable.first();
             Map<String, Object> paramsTrigger = triggerOptionparamsTriggerVariable.second();
             if (!Boolean.TRUE.equals(triggerOption))
@@ -2145,13 +2143,13 @@ public class Bydfi extends BydfiApi
 
     }
 
-    public Object handleSinceAndUntil(Object methodName, Long since, Map<String, Object> parameters)
+    public Object handleSinceAndUntil(String methodName, Long since, Map<String, Object> parameters)
     {
         List<Object> untilParamparamsUntilVariable = (List<Object>) this.handleOptionIntegerAndParams2(parameters, methodName, "until", "endTime", (Long) null);
         Long untilParam = (Long) ((List<Object>) untilParamparamsUntilVariable).get(0);
         Map<String, Object> paramsUntil = (Map<String, Object>) ((List<Object>) untilParamparamsUntilVariable).get(1);
         Long now = this.milliseconds();
-        Long sevenDays = ((((7L * 24L) * 60L) * 60L) * 1000L); // the maximum range is 7 days
+        Integer sevenDays = 604800000; // the maximum range is 7 days, 7 * 24 * 60 * 60 * 1000
         Object startTime = since;
         Object until = untilParam;
         if (java.util.Objects.equals(since, null))
@@ -2159,11 +2157,12 @@ public class Bydfi extends BydfiApi
             if (!java.util.Objects.equals(untilParam, null))
             {
                 // since is undefined but until is defined
-                startTime = (untilParam - sevenDays);
+                Long untilInt = this.parseToInt(untilParam);
+                startTime = (untilInt - ((long) sevenDays));
             } else
             {
                 // both since and until are undefined
-                startTime = (now - sevenDays);
+                startTime = (now - ((long) sevenDays));
                 until = now;
             }
         } else if (java.util.Objects.equals(untilParam, null))
@@ -2173,7 +2172,7 @@ public class Bydfi extends BydfiApi
             Long delta = (now - sinceInt);
             if ((delta != null && (sevenDays == null || delta > sevenDays)))
             {
-                until = (sinceInt + sevenDays);
+                until = (sinceInt + ((long) sevenDays));
             } else
             {
                 until = now;
@@ -2430,7 +2429,7 @@ public class Bydfi extends BydfiApi
             //     }
             //
             Map<String, Object> data = (Map<String, Object>) this.safeDict(response, "data", new HashMap<String, Object>() {{}});
-            return this.parseLeverage((Map<String, Object>) (data), market);
+            return this.parseLeverage(data, market);
         }).thenApply(Leverage::new);
 
     }
@@ -2596,7 +2595,7 @@ public class Bydfi extends BydfiApi
         Map<String, Object> marketResolved = this.safeMarket(marketId, market, (String) null, (String) null);
         String buyOrSell = this.safeString(position, "side");
         String rawPositionSide = this.safeStringLower(position, "positionSide");
-        Object positionSide = this.parsePositionSide(buyOrSell);
+        String positionSide = this.parsePositionSide(buyOrSell);
         Boolean hedged = false;
         Boolean isFetchPositionsHistory = false;
         if (!java.util.Objects.equals(rawPositionSide, null))
@@ -2845,7 +2844,7 @@ public class Bydfi extends BydfiApi
             //     }
             //
             Map<String, Object> data = (Map<String, Object>) this.safeDict(response, "data", new HashMap<String, Object>() {{}});
-            return this.parseMarginMode((Map<String, Object>) (data), market);
+            return this.parseMarginMode(data, market);
         }).thenApply(MarginMode::new);
 
     }
@@ -3125,19 +3124,20 @@ public class Bydfi extends BydfiApi
                 response = (this.privateGetV1FapiAccountBalance(this.extend(request, paramsWallet))).join();
             }
             List<Object> data = (List<Object>) this.safeList(response, "data", new ArrayList<Object>(Arrays.asList()));
-            return this.parseBalance(data);
+            return this.parseBalanceList(data);
         }).thenApply(Balances::new);
 
     }
 
-    public Balances parseBalance(Object response)
+    public Balances parseBalanceList(Object response)
     {
         Map<String, Object> result = new HashMap<String, Object>() {{
             put( "info", response );
             put( "timestamp", null );
             put( "datetime", null );
         }};
-        for (var i = 0; i < (switch ((Object)(response)) { case null -> 0; case List<?> j39v1 -> j39v1.size(); case String j39v2 -> j39v2.length(); case Object j39v3 -> j39v3.getClass().isArray() ? java.lang.reflect.Array.getLength(j39v3) : 0; }); i++)
+        Integer responseLength = ((List<?>)response).size();
+        for (var i = 0; (responseLength != null && i < responseLength); i++)
         {
             Map<String, Object> balance = (Map<String, Object>) this.safeDict(response, i, (Object) null);
             String symbol = this.safeString(balance, "asset");
@@ -3380,7 +3380,7 @@ public class Bydfi extends BydfiApi
 
     }
 
-    public CompletableFuture<Object> fetchTransactionsHelper(Object type, String code, Long since, Long limit, Map<String, Object> parameters)
+    public CompletableFuture<Object> fetchTransactionsHelper(String type, String code, Long since, Long limit, Map<String, Object> parameters)
     {
 
         return BaseExchange.supplyAsync(() -> {
@@ -3416,7 +3416,7 @@ public class Bydfi extends BydfiApi
             Long untilParam = (Long) ((List<Object>) untilParamparamsUntilVariable).get(0);
             Map<String, Object> paramsUntil = (Map<String, Object>) ((List<Object>) untilParamparamsUntilVariable).get(1);
             Long now = this.milliseconds();
-            Long sevenDays = ((((7L * 24L) * 60L) * 60L) * 1000L); // the maximum range is 7 days
+            Integer sevenDays = 604800000; // the maximum range is 7 days, 7 * 24 * 60 * 60 * 1000
             Object startTime = since;
             Object until = untilParam;
             if (java.util.Objects.equals(since, null))
@@ -3424,11 +3424,12 @@ public class Bydfi extends BydfiApi
                 if (!java.util.Objects.equals(untilParam, null))
                 {
                     // since is undefined but until is defined
-                    startTime = (untilParam - sevenDays);
+                    Long untilInt = this.parseToInt(untilParam);
+                    startTime = (untilInt - ((long) sevenDays));
                 } else
                 {
                     // both since and until are undefined
-                    startTime = (now - sevenDays);
+                    startTime = (now - ((long) sevenDays));
                     until = now;
                 }
             } else if (java.util.Objects.equals(untilParam, null))
@@ -3438,7 +3439,7 @@ public class Bydfi extends BydfiApi
                 Long delta = (now - sinceInt);
                 if ((delta != null && (sevenDays == null || delta > sevenDays)))
                 {
-                    until = (sinceInt + sevenDays);
+                    until = (sinceInt + ((long) sevenDays));
                 } else
                 {
                     until = now;
@@ -3561,13 +3562,12 @@ public class Bydfi extends BydfiApi
 
     public Object sign(Object path, Object api, Object method, Object parameters)
     {
-        Object apiName = (api == null || 0 >= ((List<?>)api).size() ? null : ((List<?>)api).get(0));
+        String apiName = (String) (api == null || 0 >= ((List<?>)api).size() ? null : ((List<?>)api).get(0));
         String apiUrl = this.safeString(this.urls.get("api"), apiName);
         if (java.util.Objects.equals(apiUrl, null))
         {
             throw new ExchangeError((this.id + " sign() has no API URL for this endpoint")) ;
         }
-        Object url = apiUrl;
         String endpoint = ("/" + path);
         String query = "";
         Map<String,Object> sortedParams = this.keysort(parameters);
@@ -3607,12 +3607,11 @@ public class Bydfi extends BydfiApi
                 }};
             }
         }
-        url = (url + endpoint);
         String bodyResolved = requestBody;
         Map<String, Object> headersResolved = requestHeaders;
         {
             HashMap<String, Object> h2kMap1 = new HashMap<String, Object>();
-            h2kMap1.put("url", url);
+            h2kMap1.put("url", (apiUrl + endpoint));
             h2kMap1.put("method", java.util.Objects.requireNonNullElse(method, "GET"));
             h2kMap1.put("body", bodyResolved);
             h2kMap1.put("headers", headersResolved);
@@ -3620,7 +3619,7 @@ public class Bydfi extends BydfiApi
         }
     }
 
-    public Object handleErrors(Object httpCode, Object reason, Object url, Object method, Object headers, Object body, Object response, Object requestHeaders, Object requestBody)
+    public Object handleErrors(Object code, Object reason, Object url, Object method, Object headers, Object body, Object response, Object requestHeaders, String requestBody)
     {
         if (java.util.Objects.equals(response, null))
         {
@@ -3632,14 +3631,14 @@ public class Bydfi extends BydfiApi
         //         "message": "Requires transaction permissions"
         //     }
         //
-        String code = this.safeString(response, "code");
+        String codeError = this.safeString(response, "code");
         String message = this.safeString(response, "message");
-        if (!java.util.Objects.equals(code, "200"))
+        if (!java.util.Objects.equals(codeError, "200"))
         {
             String feedback = ((this.id + " ") + body);
-            this.throwExactlyMatchedException(this.exceptions.get("exact"), message, feedback);
-            this.throwBroadlyMatchedException(this.exceptions.get("broad"), message, feedback);
-            this.throwExactlyMatchedException(this.exceptions.get("exact"), code, feedback);
+            this.throwExactlyMatchedException((Map<String, Object>) (this.exceptions.get("exact")), message, feedback);
+            this.throwBroadlyMatchedException((Map<String, Object>) (this.exceptions.get("broad")), message, feedback);
+            this.throwExactlyMatchedException((Map<String, Object>) (this.exceptions.get("exact")), codeError, feedback);
             throw new ExchangeError(feedback) ;
         }
         return null;

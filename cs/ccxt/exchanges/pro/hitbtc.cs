@@ -89,7 +89,8 @@ public partial class hitbtc : ccxt.hitbtc
     public async virtual Task<object> authenticate()
     {
         this.checkRequiredCredentials();
-        string? url = ((string)getValue(getValue((this.urls != null && ((IDictionary<string, object>)this.urls).ContainsKey("api") ? ((IDictionary<string, object>)this.urls)["api"] : null), "ws"), "private"));
+        IDictionary<string, object> wsUrls = this.safeDict((this.urls != null && this.urls.ContainsKey("api") ? this.urls["api"] : null), "ws");
+        string? url = this.safeString(wsUrls, "private");
         string messageHash = "authenticated";
         var client = this.client(url);
         var future = client.reusableFuture(messageHash);
@@ -126,23 +127,25 @@ public partial class hitbtc : ccxt.hitbtc
      * @param {string[]} [symbols] unified CCXT symbol(s)
      * @param {object} [params] extra parameters specific to the hitbtc api
      */
-    public async virtual Task<object> subscribePublic(object name, object messageHashPrefix, object symbols = null, IDictionary<string, object>? parameters = null)
+    public async virtual Task<object> subscribePublic(object name, string messageHashPrefix, object symbols = null, IDictionary<string, object>? parameters = null)
     {
         parameters ??= new Dictionary<string, object>();
         if ((this.markets == null))
         {
             await this.loadMarkets();
         }
-        IList<object> symbolsNormalized = this.marketSymbols(symbols);
+        IList<object> symbolsNormalized = this.marketSymbols(this.toArray(symbols));
         bool isBatch = ((string)name).IndexOf("batch", StringComparison.Ordinal) >= 0;
-        bool resolvedPerSymbol = !isBatch || ((messageHashPrefix is "orderbooks")); // handleOrderBook resolves only per-symbol hashes, also on the batch channels
-        string? url = ((string)getValue(getValue((this.urls != null && ((IDictionary<string, object>)this.urls).ContainsKey("api") ? ((IDictionary<string, object>)this.urls)["api"] : null), "ws"), "public"));
+        bool resolvedPerSymbol = !isBatch || ((messageHashPrefix == "orderbooks")); // handleOrderBook resolves only per-symbol hashes, also on the batch channels
+        IDictionary<string, object> wsUrls = this.safeDict((this.urls != null && this.urls.ContainsKey("api") ? this.urls["api"] : null), "ws");
+        string? url = this.safeString(wsUrls, "public");
         List<object> messageHashes = new List<object>() {};
         if ((symbolsNormalized != null) && resolvedPerSymbol)
         {
             for (int i = 0; i < (symbolsNormalized?.Count ?? 0); i++)
             {
-                messageHashes.Add(add(add(messageHashPrefix, "::"), symbolsNormalized[i]));
+                string? symbolId = ((string)symbolsNormalized[i]);
+                messageHashes.Add(((messageHashPrefix + "::") + symbolId));
             }
         } else
         {
@@ -176,12 +179,14 @@ public partial class hitbtc : ccxt.hitbtc
             await this.loadMarkets();
         }
         await this.authenticate();
-        string? url = ((string)getValue(getValue((this.urls != null && ((IDictionary<string, object>)this.urls).ContainsKey("api") ? ((IDictionary<string, object>)this.urls)["api"] : null), "ws"), "private"));
+        IDictionary<string, object> wsUrls = this.safeDict((this.urls != null && this.urls.ContainsKey("api") ? this.urls["api"] : null), "ws");
+        string? url = this.safeString(wsUrls, "private");
         List<object> splitName = name.Split(new [] {"_subscribe"}, StringSplitOptions.None).ToList<object>();
-        object messageHash = this.safeString(splitName, 0, "");
+        string messageHashBase = this.safeString(splitName, 0, "");
+        string messageHash = messageHashBase;
         if ((symbol != null))
         {
-            messageHash = ((messageHash + "::") + symbol);
+            messageHash = ((messageHashBase + "::") + (symbol));
         }
         Int64? requestId = this.incrementingNonce();
         Dictionary<string, object> subscribe = new Dictionary<string, object>() {
@@ -209,8 +214,10 @@ public partial class hitbtc : ccxt.hitbtc
             await this.loadMarkets();
         }
         await this.authenticate();
-        string? url = ((string)getValue(getValue((this.urls != null && ((IDictionary<string, object>)this.urls).ContainsKey("api") ? ((IDictionary<string, object>)this.urls)["api"] : null), "ws"), "private"));
-        string messageHash = ((object)this.incrementingNonce()).ToString();
+        IDictionary<string, object> wsUrls = this.safeDict((this.urls != null && this.urls.ContainsKey("api") ? this.urls["api"] : null), "ws");
+        string? url = this.safeString(wsUrls, "private");
+        Int64? requestId = this.incrementingNonce();
+        string? messageHash = this.numberToString(requestId);
         Dictionary<string, object> subscribe = new Dictionary<string, object>() {
             { "method", name },
             { "params", parameters },
@@ -259,7 +266,7 @@ public partial class hitbtc : ccxt.hitbtc
             } },
         };
         ccxt.pro.IOrderBook orderbook = ((ccxt.pro.IOrderBook)await this.subscribePublic(name, "orderbooks", new List<object>() {symbol}, this.deepExtend(request, paramsOmitted)));
-        return ccxt.BaseExchange.ToOrderBookSnapshot((orderbook as IOrderBook).limit());
+        return (orderbook as IOrderBook).limit().Copy();
     }
 
     public virtual void handleOrderBook(WebSocketClient client, Dictionary<string, object> message)
@@ -317,10 +324,10 @@ public partial class hitbtc : ccxt.hitbtc
         {
             string? marketId = ((string)marketIds[i]);
             Dictionary<string, object> market = this.safeMarket(marketId);
-            string? symbol = ((string)(market.ContainsKey("symbol") ? market["symbol"] : null));
+            string? symbol = this.safeSymbol(marketId, market);
             object item = (data != null && marketId != null && data.ContainsKey(marketId) ? data[marketId] : null);
             string messageHash = ("orderbooks::" + symbol);
-            if (!((this.orderbooks != null && symbol != null && this.orderbooks.ContainsKey(symbol))))
+            if (!(((symbol != null) && (this.orderbooks != null && symbol != null && this.orderbooks.ContainsKey(symbol)))))
             {
                 IDictionary<string, object> subscription = this.safeDict(client.subscriptions, messageHash, new Dictionary<string, object>() {});
                 Int64? limit = this.safeInteger(subscription, "limit");
@@ -354,14 +361,6 @@ public partial class hitbtc : ccxt.hitbtc
         double? price = this.safeNumber(delta, 0);
         double? amount = this.safeNumber(delta, 1);
         (bookside as IOrderBookSide).store(price, amount);
-    }
-
-    public override void handleDeltas(object bookside, IList<object> deltas)
-    {
-        for (int i = 0; i < (deltas?.Count ?? 0); i++)
-        {
-            this.handleDelta(bookside, (deltas != null && i < deltas.Count ? deltas[i] : null));
-        }
     }
 
     /**
@@ -406,7 +405,7 @@ public partial class hitbtc : ccxt.hitbtc
         {
             await this.loadMarkets();
         }
-        IList<object> symbolsNormalized = this.marketSymbols(symbols);
+        IList<object> symbolsNormalized = this.marketSymbols(this.toArray(symbols));
         IList<object> methodNameparamsMethodVariable = (IList<object>)this.handleParamString(parameters, "callerMethodName", "watchTickers");
         string? methodName = (string)methodNameparamsMethodVariable[0];
         IDictionary<string, object> paramsMethod = ((IDictionary<string, object>)methodNameparamsMethodVariable[1]); // watchTicker passes its own name, so options.watchTicker still applies to it
@@ -503,7 +502,7 @@ public partial class hitbtc : ccxt.hitbtc
         {
             string? marketId = ((string)marketIds[i]);
             Dictionary<string, object> market = this.safeMarket(marketId);
-            string? symbol = ((string)(market.ContainsKey("symbol") ? market["symbol"] : null));
+            string? symbol = this.safeSymbol(marketId, market);
             ccxt.Ticker ticker = this.parseWsTicker((marketId != null && data.ContainsKey(marketId) ? data[marketId] : null), market);
             this.tickers[(string)symbol] = ccxt.BaseExchange.FromTicker(ticker);
             result.Add(ccxt.BaseExchange.FromTicker(ticker));
@@ -513,7 +512,7 @@ public partial class hitbtc : ccxt.hitbtc
         client.resolve(result, topic);
     }
 
-    public virtual ccxt.Ticker parseWsTicker(object ticker, object market = null)
+    public virtual ccxt.Ticker parseWsTicker(object ticker, IDictionary<string, object>? market = null)
     {
         //
         //    {
@@ -588,7 +587,7 @@ public partial class hitbtc : ccxt.hitbtc
         {
             await this.loadMarkets();
         }
-        IList<object> symbolsNormalized = this.marketSymbols(symbols, null, false);
+        IList<object> symbolsNormalized = this.marketSymbols(this.toArray(symbols), null, false);
         IDictionary<string, object> options = this.safeDict(this.options, "watchBidsAsks");
         string? defaultMethod = this.safeString(options, "method", "orderbook/top/{speed}/batch");
         string? method = this.safeString2(parameters, "method", "defaultMethod", defaultMethod);
@@ -644,7 +643,7 @@ public partial class hitbtc : ccxt.hitbtc
         {
             string? marketId = ((string)marketIds[i]);
             Dictionary<string, object> market = this.safeMarket(marketId);
-            string? symbol = ((string)(market.ContainsKey("symbol") ? market["symbol"] : null));
+            string? symbol = this.safeSymbol(marketId, market);
             Dictionary<string, object> ticker = this.parseWsBidAsk((marketId != null && data.ContainsKey(marketId) ? data[marketId] : null), market);
             this.bidsasks[(string)symbol] = ticker;
             result.Add(ticker);
@@ -654,7 +653,7 @@ public partial class hitbtc : ccxt.hitbtc
         client.resolve(result, topic);
     }
 
-    public virtual Dictionary<string, object> parseWsBidAsk(object ticker, IDictionary<string, object> market = null)
+    public virtual Dictionary<string, object> parseWsBidAsk(object ticker, IDictionary<string, object>? market = null)
     {
         Int64? timestamp = this.safeInteger(ticker, "t");
         object bidAskSymbol = null;
@@ -709,7 +708,7 @@ public partial class hitbtc : ccxt.hitbtc
         {
             limitResolved = ((Int64?)ccxt.pro.BaseCache.getLimitOf(trades, symbol, limit));
         }
-        return ccxt.BaseExchange.ToTradeList(this.filterBySinceLimit(trades, since, limitResolved, "timestamp"));
+        return ccxt.BaseExchange.ToTradeList(this.filterBySinceLimit(this.toArray(trades), since, limitResolved, "timestamp"));
     }
 
     public virtual object handleTrades(WebSocketClient client, Dictionary<string, object> message)
@@ -760,7 +759,7 @@ public partial class hitbtc : ccxt.hitbtc
             string? marketId = ((string)marketIds[i]);
             Dictionary<string, object> market = this.safeMarket(marketId);
             Int64? tradesLimit = this.safeInteger(this.options, "tradesLimit", 1000);
-            string? symbol = ((string)(market.ContainsKey("symbol") ? market["symbol"] : null));
+            string? symbol = this.safeSymbol(marketId, market);
             ccxt.pro.ArrayCache stored = ((ccxt.pro.ArrayCache)this.safeValue(this.trades, symbol));
             if ((stored == null))
             {
@@ -842,22 +841,23 @@ public partial class hitbtc : ccxt.hitbtc
         string? period = this.safeString(this.timeframes, timeframeVar, timeframeVar);
         string name = ("candles/" + period);
         Dictionary<string, object> market = this.market(symbol);
-        Dictionary<string, object> request = new Dictionary<string, object>() {
-            { "params", new Dictionary<string, object>() {
-                { "symbols", new List<object>() {(market.ContainsKey("id") ? market["id"] : null)} },
-            } },
+        Dictionary<string, object> subscribeParams = new Dictionary<string, object>() {
+            { "symbols", new List<object>() {(market.ContainsKey("id") ? market["id"] : null)} },
         };
         if ((limit != null))
         {
-            ((IDictionary<string,object>)request["params"])["limit"] = limit;
+            subscribeParams["limit"] = limit;
         }
+        Dictionary<string, object> request = new Dictionary<string, object>() {
+            { "params", subscribeParams },
+        };
         object ohlcv = await this.subscribePublic(name, "candles", new List<object>() {symbol}, this.deepExtend(request, parameters));
         Int64? limitResolved = limit;
         if (this.newUpdates)
         {
             limitResolved = ((Int64?)ccxt.pro.BaseCache.getLimitOf(ohlcv, symbol, limit));
         }
-        return ccxt.BaseExchange.ToOHLCVList(this.filterBySinceLimit(ohlcv, since, limitResolved, 0));
+        return ccxt.BaseExchange.ToOHLCVList(this.filterBySinceLimit(this.toArray(ohlcv), since, limitResolved, 0));
     }
 
     public virtual object handleOHLCV(WebSocketClient client, Dictionary<string, object> message)
@@ -909,7 +909,7 @@ public partial class hitbtc : ccxt.hitbtc
         {
             string? marketId = ((string)marketIds[i]);
             Dictionary<string, object> market = this.safeMarket(marketId);
-            string? symbol = ((string)(market.ContainsKey("symbol") ? market["symbol"] : null));
+            string? symbol = this.safeSymbol(marketId, market);
             this.ohlcvs[(string)symbol] = this.safeDict(this.ohlcvs, symbol, new Dictionary<string, object>() {});
             ccxt.pro.ArrayCacheByTimestamp stored = ((ccxt.pro.ArrayCacheByTimestamp)this.safeValue(this.safeDict(this.ohlcvs, symbol), timeframe));
             if ((stored == null))
@@ -918,7 +918,7 @@ public partial class hitbtc : ccxt.hitbtc
                 stored = new ArrayCacheByTimestamp(limit);
                 ((IDictionary<string,object>)(this.ohlcvs != null && symbol != null && this.ohlcvs.ContainsKey(symbol) ? this.ohlcvs[symbol] : null))[timeframe] = stored;
             }
-            List<object> ohlcvs = this.parseWsOHLCVs((data != null && marketId != null && data.ContainsKey(marketId) ? data[marketId] : null), market);
+            List<object> ohlcvs = this.parseWsOHLCVs(this.toArray((data != null && marketId != null && data.ContainsKey(marketId) ? data[marketId] : null)), market);
             for (int j = 0; j < (ohlcvs?.Count ?? 0); j++)
             {
                 stored.append(ohlcvs[j]);
@@ -985,7 +985,7 @@ public partial class hitbtc : ccxt.hitbtc
         {
             limitResolved = ((Int64?)ccxt.pro.BaseCache.getLimitOf(orders, symbol, limit));
         }
-        return ccxt.BaseExchange.ToOrderList(this.filterBySinceLimit(orders, since, limitResolved, "timestamp"));
+        return ccxt.BaseExchange.ToOrderList(this.filterBySinceLimit(this.toArray(orders), since, limitResolved, "timestamp"));
     }
 
     public virtual object handleOrder(WebSocketClient client, Dictionary<string, object> message)
@@ -1073,11 +1073,11 @@ public partial class hitbtc : ccxt.hitbtc
 
     public virtual void handleOrderHelper(WebSocketClient client, Dictionary<string, object> message, object order)
     {
-        ccxt.pro.ArrayCache orders = this.orders;
-        if ((orders == null))
+        if ((this.orders == null))
         {
             return;
         }
+        ccxt.pro.ArrayCache orders = this.orders;
         string? marketId = this.safeStringLower2(order, "instrument", "symbol");
         string? method = this.safeString(message, "method", "");
         List<object> splitMethod = method.Split(new [] {"_order"}, StringSplitOptions.None).ToList<object>();
@@ -1424,7 +1424,8 @@ public partial class hitbtc : ccxt.hitbtc
         IList<object> marketTypeparamsMarketTypeVariable = (IList<object>)this.handleMarketTypeAndParams("fetchOpenOrdersWs", market, parameters);
         string? marketType = (string)marketTypeparamsMarketTypeVariable[0];
         IDictionary<string, object> paramsMarketType = ((IDictionary<string, object>)marketTypeparamsMarketTypeVariable[1]);
-        string? marginMode = this.handleMarginModeAndParams("fetchOpenOrdersWs", paramsMarketType).Item1;
+        (string?, object) marginModeVariable = this.handleMarginModeAndParams("fetchOpenOrdersWs", paramsMarketType);
+        string? marginMode = marginModeVariable.Item1;
         if ((marketType == "swap"))
         {
             return ccxt.BaseExchange.ToOrderList(await this.tradeRequest("futures_get_orders", request));
@@ -1463,7 +1464,7 @@ public partial class hitbtc : ccxt.hitbtc
         // in that window invisible to the consumer forever (same class as
         // issue #26773); the free/used/total aggregates are rebuilt from the
         // merged currencies by safeBalance
-        Dictionary<string, object> balance = this.parseBalance(parameters);
+        Dictionary<string, object> balance = this.parseBalanceList(parameters);
         if ((this.balance == null))
         {
             this.balance = new Dictionary<string, object>() {};
@@ -1573,7 +1574,7 @@ public partial class hitbtc : ccxt.hitbtc
                 { "spot_balance", this.handleBalance },
                 { "futures_balance", this.handleBalance },
             };
-            object method = ((channel == null)) ? null : this.safeValue(methods, channel);
+            Delegate method = ((Delegate)this.safeValue(methods, channel));
             if ((method != null))
             {
                 DynamicInvoker.InvokeMethod(method, new object[] { client, message});
@@ -1611,11 +1612,11 @@ public partial class hitbtc : ccxt.hitbtc
         //        "result": true
         //    }
         //
-        bool? success = this.safeBool(message, "result");
+        bool? success = this.safeBool(message, "result", false);
         string messageHash = "authenticated";
         if ((success == true))
         {
-            Future future = ((Future)this.safeValue(client.futures, messageHash));
+            Future future = client.getFuture(messageHash);
             (future as Future).resolve(true);
         } else
         {
@@ -1651,8 +1652,8 @@ public partial class hitbtc : ccxt.hitbtc
                 string? errorMessage = this.safeString(error, "message");
                 string? description = this.safeString(error, "description");
                 string feedback = ((this.id + " ") + description);
-                this.throwExactlyMatchedException((this.exceptions != null && ((IDictionary<string, object>)this.exceptions).ContainsKey("exact") ? ((IDictionary<string, object>)this.exceptions)["exact"] : null), code, feedback);
-                this.throwBroadlyMatchedException((this.exceptions != null && ((IDictionary<string, object>)this.exceptions).ContainsKey("broad") ? ((IDictionary<string, object>)this.exceptions)["broad"] : null), errorMessage, feedback);
+                this.throwExactlyMatchedException((this.exceptions != null && this.exceptions.ContainsKey("exact") ? this.exceptions["exact"] : null), code, feedback);
+                this.throwBroadlyMatchedException((this.exceptions != null && this.exceptions.ContainsKey("broad") ? this.exceptions["broad"] : null), errorMessage, feedback);
                 throw new ExchangeError (feedback) ;
             } catch(Exception e)
             {

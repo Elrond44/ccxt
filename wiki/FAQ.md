@@ -411,6 +411,25 @@ CCXT is also a builder on GRVT meaning that by default users will pay 1bps (0.01
 exchange.options['builderFee'] = False
 ```
 
+### How to use the InteractiveBrokers in CCXT?
+
+InteractiveBrokers has a different API infrastructure, as opposed to typical exchanges. Its access to the Web-API might depend on account-type or jurisdiction. However, most PRO users should be able to access it - visit https://ndcdyn.interactivebrokers.com/oauth/ and if you are able to generate credentials, then you will be able to use web-api. Then set these credentials for exchange instance:
+```
+instance = new ccxt.interactivebrokers ({
+  "apiKey":"______ACCESS_TOKEN______",
+  "secret":"______ACCESS_TOKEN_SECRET______",
+  "options": {
+    "consumer_key": "______VALUE_HERE______",
+    "signaturePemPath": "______PATH_TO_FILE______",
+    "encryptionPemPath": "______PATH_TO_FILE______",
+    "dhParamPemPath": "______PATH_TO_FILE______"
+  }
+})
+```
+
+Note, that due to the IBKR limitations, user can only have one active session - if you login the ibkr website, your running ibkr instance will switch off.
+
+
 ### How to use the Extended Exchange in CCXT?
 
 Extended works similarly to any other CCXT DEX and only requires the StarkKey private key and the API Key, both can be retrieved using the website.
